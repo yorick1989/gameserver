@@ -1,0 +1,59 @@
+# Use the Ubunbu image to pull and copy the 32-bit binaries from (for SteamCMD)
+FROM docker.io/library/ubuntu:latest AS builder
+
+USER root
+
+WORKDIR /root
+
+# Update the repos and add the 32-bits architecture.
+ARG DEBIAN_FRONTEND=noninteractive
+RUN dpkg --add-architecture i386 \
+    && apt-get update -y \
+    && apt-get install -y --no-install-recommends libc6:i386 libcrypt1:i386 libstdc++6:i386 \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM docker.io/library/alpine:latest AS base
+
+LABEL maintainer="Yorick Gruijthuijzen <yorick-1989@hotmail.com>" \
+      org.opencontainers.image.authors="Yorick Gruijthuijzen <yorick-1989@hotmail.com>"  \
+      org.opencontainers.image.title="Loya gameserver" \
+      org.opencontainers.image.description="Loya gameserver" \
+      org.opencontainers.image.licenses="GPL-3.0 license" \
+      org.opencontainers.image.url="https://github.com/yorick1989/gameserver:loya" \
+      org.opencontainers.image.source="https://github.com/yorick1989/gameserver" \
+      org.opencontainers.image.documentation="https://github.com/yorick1989/gameserver"
+
+ENV STEAMCMD_PATH=/gameserver/steamcmd
+ENV STEAMCMD_LOGIN=anonymous
+ENV GS_APPID=2271150
+ENV GS_PATH=/gameserver/loya
+ENV LD_LIBRARY_PATH=/usr/lib
+
+COPY --from=builder /lib/i386-linux-gnu /lib/
+
+RUN apk add --no-cache wine bash libgcc
+
+RUN adduser \
+ -Dh /gameserver \
+ -s /sbin/nologin \
+ gameserver
+
+USER gameserver
+
+RUN mkdir -p ${STEAMCMD_PATH} ${GS_PATH}
+
+WORKDIR /gameserver/
+
+RUN wget -qO- "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz" \
+ | tar -C /gameserver/steamcmd -zxvf - \
+ && ${STEAMCMD_PATH}/steamcmd.sh +quit
+
+COPY ./data/loya.sh /gameserver/loya.sh
+
+COPY ./data/steam_updater.sh /gameserver/steam_updater.sh
+
+ENTRYPOINT ["/bin/bash", "/gameserver/loya.sh"]
+
+VOLUME ${GS_PATH}
+
+EXPOSE 15010
